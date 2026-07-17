@@ -9,38 +9,110 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuccessRouteImport } from './routes/success'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CreateEscrowRouteImport } from './routes/create-escrow'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EscrowActiveRouteImport } from './routes/escrow.active'
 
+const SuccessRoute = SuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreateEscrowRoute = CreateEscrowRouteImport.update({
+  id: '/create-escrow',
+  path: '/create-escrow',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EscrowActiveRoute = EscrowActiveRouteImport.update({
+  id: '/escrow/active',
+  path: '/escrow/active',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/create-escrow': typeof CreateEscrowRoute
+  '/dashboard': typeof DashboardRoute
+  '/success': typeof SuccessRoute
+  '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/create-escrow': typeof CreateEscrowRoute
+  '/dashboard': typeof DashboardRoute
+  '/success': typeof SuccessRoute
+  '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/create-escrow': typeof CreateEscrowRoute
+  '/dashboard': typeof DashboardRoute
+  '/success': typeof SuccessRoute
+  '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/create-escrow'
+    | '/dashboard'
+    | '/success'
+    | '/escrow/active'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/create-escrow' | '/dashboard' | '/success' | '/escrow/active'
+  id:
+    | '__root__'
+    | '/'
+    | '/create-escrow'
+    | '/dashboard'
+    | '/success'
+    | '/escrow/active'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CreateEscrowRoute: typeof CreateEscrowRoute
+  DashboardRoute: typeof DashboardRoute
+  SuccessRoute: typeof SuccessRoute
+  EscrowActiveRoute: typeof EscrowActiveRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/success': {
+      id: '/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof SuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/create-escrow': {
+      id: '/create-escrow'
+      path: '/create-escrow'
+      fullPath: '/create-escrow'
+      preLoaderRoute: typeof CreateEscrowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +120,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/escrow/active': {
+      id: '/escrow/active'
+      path: '/escrow/active'
+      fullPath: '/escrow/active'
+      preLoaderRoute: typeof EscrowActiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CreateEscrowRoute: CreateEscrowRoute,
+  DashboardRoute: DashboardRoute,
+  SuccessRoute: SuccessRoute,
+  EscrowActiveRoute: EscrowActiveRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
