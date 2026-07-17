@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AppProvider } from "../lib/app-state";
 
 function NotFoundComponent() {
   return (
@@ -108,17 +109,18 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="relative min-h-screen overflow-hidden">
-        {/* Ambient glow blobs */}
-        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-          <div className="animate-blob absolute -top-32 -left-32 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
-          <div className="animate-blob absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-violet/15 blur-3xl [animation-delay:-4s]" />
-          <div className="animate-blob absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-emerald/15 blur-3xl [animation-delay:-8s]" />
-          <div className="grid-bg absolute inset-0 opacity-40" />
+      <AppProvider>
+        <div className="relative min-h-screen overflow-hidden">
+          <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+            <div className="animate-blob absolute -top-32 -left-32 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
+            <div className="animate-blob absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-violet/15 blur-3xl [animation-delay:-4s]" />
+            <div className="animate-blob absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-emerald/15 blur-3xl [animation-delay:-8s]" />
+            <div className="grid-bg absolute inset-0 opacity-40" />
+          </div>
+          <Outlet />
+          <Toaster theme="dark" position="top-right" richColors closeButton />
         </div>
-        <Outlet />
-        <Toaster theme="dark" position="top-right" richColors closeButton />
-      </div>
+      </AppProvider>
     </QueryClientProvider>
   );
 }
