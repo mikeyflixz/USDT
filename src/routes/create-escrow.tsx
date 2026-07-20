@@ -6,7 +6,7 @@ import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { AppButton } from "@/components/site/app-button";
 import { ConnectWalletModal } from "@/components/site/connect-wallet-modal";
-import { useApp, NETWORKS, shortAddr, type Network as Net } from "@/lib/app-state";
+import { useApp, NETWORKS, shortAddr, MOCK_WALLET, type Network as Net } from "@/lib/app-state";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/create-escrow")({
