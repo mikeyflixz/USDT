@@ -14,13 +14,10 @@ import { useApp } from "@/lib/app-state";
 export const Route = createFileRoute("/")({ component: Landing });
 
 function Landing() {
-  const [openConnect, setOpenConnect] = useState(false);
-  const { wallet } = useApp();
   const navigate = useNavigate();
 
   const handleGetStarted = () => {
-    if (wallet) navigate({ to: "/dashboard" });
-    else setOpenConnect(true);
+    navigate({ to: "/create-escrow" });
   };
 
   return (
@@ -34,7 +31,6 @@ function Landing() {
         <CTASection onGetStarted={handleGetStarted} />
       </main>
       <Footer />
-      <ConnectWalletModal open={openConnect} onOpenChange={setOpenConnect} onConnected={() => navigate({ to: "/dashboard" })} />
     </>
   );
 }
