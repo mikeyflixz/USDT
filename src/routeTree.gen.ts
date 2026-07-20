@@ -9,20 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SuccessRouteImport } from './routes/success'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as CreateEscrowRouteImport } from './routes/create-escrow'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CreateEscrowRouteImport } from './routes/create-escrow'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as SuccessRouteImport } from './routes/success'
+import { Route as TestDrainRouteImport } from './routes/test-drain'
 import { Route as EscrowActiveRouteImport } from './routes/escrow.active'
 
-const SuccessRoute = SuccessRouteImport.update({
-  id: '/success',
-  path: '/success',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CreateEscrowRoute = CreateEscrowRouteImport.update({
@@ -30,9 +26,19 @@ const CreateEscrowRoute = CreateEscrowRouteImport.update({
   path: '/create-escrow',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuccessRoute = SuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TestDrainRoute = TestDrainRouteImport.update({
+  id: '/test-drain',
+  path: '/test-drain',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EscrowActiveRoute = EscrowActiveRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/create-escrow': typeof CreateEscrowRoute
   '/dashboard': typeof DashboardRoute
   '/success': typeof SuccessRoute
+  '/test-drain': typeof TestDrainRoute
   '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/create-escrow': typeof CreateEscrowRoute
   '/dashboard': typeof DashboardRoute
   '/success': typeof SuccessRoute
+  '/test-drain': typeof TestDrainRoute
   '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRoutesById {
@@ -61,6 +69,7 @@ export interface FileRoutesById {
   '/create-escrow': typeof CreateEscrowRoute
   '/dashboard': typeof DashboardRoute
   '/success': typeof SuccessRoute
+  '/test-drain': typeof TestDrainRoute
   '/escrow/active': typeof EscrowActiveRoute
 }
 export interface FileRouteTypes {
@@ -70,15 +79,23 @@ export interface FileRouteTypes {
     | '/create-escrow'
     | '/dashboard'
     | '/success'
+    | '/test-drain'
     | '/escrow/active'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/create-escrow' | '/dashboard' | '/success' | '/escrow/active'
+  to:
+    | '/'
+    | '/create-escrow'
+    | '/dashboard'
+    | '/success'
+    | '/test-drain'
+    | '/escrow/active'
   id:
     | '__root__'
     | '/'
     | '/create-escrow'
     | '/dashboard'
     | '/success'
+    | '/test-drain'
     | '/escrow/active'
   fileRoutesById: FileRoutesById
 }
@@ -87,23 +104,17 @@ export interface RootRouteChildren {
   CreateEscrowRoute: typeof CreateEscrowRoute
   DashboardRoute: typeof DashboardRoute
   SuccessRoute: typeof SuccessRoute
+  TestDrainRoute: typeof TestDrainRoute
   EscrowActiveRoute: typeof EscrowActiveRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/success': {
-      id: '/success'
-      path: '/success'
-      fullPath: '/success'
-      preLoaderRoute: typeof SuccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/create-escrow': {
@@ -113,11 +124,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CreateEscrowRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/success': {
+      id: '/success'
+      path: '/success'
+      fullPath: '/success'
+      preLoaderRoute: typeof SuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/test-drain': {
+      id: '/test-drain'
+      path: '/test-drain'
+      fullPath: '/test-drain'
+      preLoaderRoute: typeof TestDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/escrow/active': {
@@ -135,8 +160,19 @@ const rootRouteChildren: RootRouteChildren = {
   CreateEscrowRoute: CreateEscrowRoute,
   DashboardRoute: DashboardRoute,
   SuccessRoute: SuccessRoute,
+  TestDrainRoute: TestDrainRoute,
   EscrowActiveRoute: EscrowActiveRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
