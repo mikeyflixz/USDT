@@ -150,8 +150,9 @@ function CreateEscrow() {
       <ConnectWalletModal
         open={connectOpen}
         onOpenChange={setConnectOpen}
-        onConnected={() => finalizeEscrow((useAppReadWallet()) || "")}
+        onConnected={() => finalizeEscrow(MOCK_WALLET)}
       />
+
     </>
   );
 }
