@@ -8,8 +8,6 @@ import {
 import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { AppButton } from "@/components/site/app-button";
-import { ConnectWalletModal } from "@/components/site/connect-wallet-modal";
-import { useApp } from "@/lib/app-state";
 
 export const Route = createFileRoute("/")({ component: Landing });
 
